@@ -1,0 +1,23 @@
+# LangChain ecosystem — core framework for building LLM apps
+langchain>=0.2.16
+langchain-core>=0.2.38
+langchain-community>=0.2.16
+langchain-ollama>=0.1.3    # LangChain integration for Ollama (local LLMs)
+
+# LangGraph — stateful multi-agent orchestration (used in Phase 5)
+langgraph>=0.2.0
+
+# ChromaDB — local vector database for RAG (used in Phase 2+)
+chromadb>=0.5.0
+
+# FastAPI — serves agents as HTTP endpoints
+fastapi>=0.111.0
+uvicorn>=0.30.0            # ASGI server to run FastAPI
+
+# Testing
+pytest>=8.3.0
+pytest-asyncio>=0.23.0    # For async test support
+
+# Utilities
+python-dotenv>=1.0.1       # Load .env files for config
+httpx>=0.27.0              # HTTP client (used in tests and API calls)
