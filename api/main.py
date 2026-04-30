@@ -16,7 +16,7 @@ from pydantic import BaseModel
 app = FastAPI(
     title="SRE Agentic AI",
     description="Multi-agent SRE system powered by local Llama via Ollama",
-    version="0.2.0 — Phase 2: Retrieval Agent",
+    version="0.3.0 — Phase 3: Citation Agent",
 )
 
 
@@ -70,6 +70,54 @@ def health_check():
             status="ok",
             report=result["output"],
             containers_checked=len(MOCK_CONTAINERS),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+
+
+class CitationRequest(BaseModel):
+    """
+    LEARNING — Optional conversation_history field:
+    Allows callers to pass prior conversation turns for multi-turn support.
+    Each turn is {"role": "user"|"assistant", "content": "..."}.
+    """
+    symptom: str
+    conversation_history: list[dict] = []
+
+
+class CitationResponse(BaseModel):
+    status: str
+    report: str
+    symptom: str
+
+
+@app.post(
+    "/citation",
+    response_model=CitationResponse,
+    summary="Run the Citation Agent",
+    description="Searches runbooks and past incidents, returns cited recommendations.",
+)
+def citation(request: CitationRequest):
+    """
+    LEARNING — Citation endpoint with multi-turn support:
+    Pass conversation_history to continue a previous conversation.
+    The agent will remember previous questions and build on them.
+
+    Try:
+      {"symptom": "nginx is OOMKilled, restart count is 3"}
+      {"symptom": "worker keeps crashing with exit code 1"}
+      {"symptom": "app-server CPU at 95%, SLO breach on latency"}
+    """
+    try:
+        from agents.citation_agent import run_citation_query
+        result = run_citation_query(
+            request.symptom,
+            conversation_history=request.conversation_history or None,
+        )
+        return CitationResponse(
+            status="ok",
+            report=result["output"],
+            symptom=request.symptom,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
