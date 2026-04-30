@@ -16,24 +16,34 @@ from pydantic import BaseModel
 app = FastAPI(
     title="SRE Agentic AI",
     description="Multi-agent SRE system powered by local Llama via Ollama",
-    version="0.1.0 — Phase 1: Health Agent",
+    version="0.2.0 — Phase 2: Retrieval Agent",
 )
 
 
 class HealthCheckResponse(BaseModel):
-    """
-    LEARNING — Pydantic models:
-    Define the shape of API responses. FastAPI validates and serializes automatically.
-    This is also self-documenting — appears in /docs.
-    """
     status: str
     report: str
     containers_checked: int
 
 
+class LogAnalysisRequest(BaseModel):
+    """
+    LEARNING — Request body model:
+    POST endpoints take a request body. Pydantic validates it automatically.
+    If 'query' is missing or not a string, FastAPI returns a 422 error.
+    """
+    query: str
+
+
+class LogAnalysisResponse(BaseModel):
+    status: str
+    report: str
+    query: str
+
+
 @app.get("/", summary="Root")
 def root():
-    return {"message": "SRE Agentic AI is running", "phase": 1, "docs": "/docs"}
+    return {"message": "SRE Agentic AI is running", "phase": 2, "docs": "/docs"}
 
 
 @app.get(
@@ -62,6 +72,35 @@ def health_check():
             containers_checked=len(MOCK_CONTAINERS),
         )
     except Exception as e:
-        # LEARNING: In production, never expose raw exception messages to clients.
-        # Log them server-side and return a generic error.
+        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+
+
+@app.post(
+    "/log-analysis",
+    response_model=LogAnalysisResponse,
+    summary="Run the Retrieval Agent",
+    description="Semantically searches log files and returns a grounded analysis report.",
+)
+def log_analysis(request: LogAnalysisRequest):
+    """
+    LEARNING — RAG endpoint:
+    1. Query is embedded and used to search ChromaDB
+    2. Relevant log chunks are retrieved
+    3. LLM synthesizes a grounded answer from the chunks
+    4. Response includes source citations
+
+    Try queries like:
+      {"query": "Why did the worker stop?"}
+      {"query": "Find all OOM errors"}
+      {"query": "What was the CPU situation on app-server?"}
+    """
+    try:
+        from agents.retrieval_agent import run_log_analysis
+        result = run_log_analysis(request.query)
+        return LogAnalysisResponse(
+            status="ok",
+            report=result["output"],
+            query=request.query,
+        )
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
