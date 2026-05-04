@@ -16,7 +16,7 @@ from pydantic import BaseModel
 app = FastAPI(
     title="SRE Agentic AI",
     description="Multi-agent SRE system powered by local Llama via Ollama",
-    version="0.3.0 — Phase 3: Citation Agent",
+    version="0.4.0 — Phase 4: Coding Agent",
 )
 
 
@@ -118,6 +118,61 @@ def citation(request: CitationRequest):
             status="ok",
             report=result["output"],
             symptom=request.symptom,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+
+
+class CodeFixRequest(BaseModel):
+    """
+    LEARNING — auto_approve field:
+    In production this would default to False — human must approve via a separate call.
+    Set to True only in testing or demo mode to skip the interactive prompt.
+    """
+    service_name: str
+    problem: str
+    auto_approve: bool = False
+
+
+class CodeFixResponse(BaseModel):
+    status: str
+    service_name: str
+    fix: dict | None
+    reflection: dict | None
+    revision_count: int
+
+
+@app.post(
+    "/fix-code",
+    response_model=CodeFixResponse,
+    summary="Run the Coding Agent",
+    description="Generates a config fix with self-reflection and human-in-the-loop approval.",
+)
+def fix_code(request: CodeFixRequest):
+    """
+    LEARNING — Code generation pipeline:
+    1. Agent reads service config via tools (grounded generation)
+    2. Agent generates a structured JSON fix
+    3. Second LLM call critiques the fix (self-reflection)
+    4. If confidence >= 7: presented for human approval (or auto-approved in test mode)
+
+    Try:
+      {"service_name": "nginx", "problem": "nginx OOMKilled, memory limit too low", "auto_approve": true}
+      {"service_name": "worker", "problem": "worker crashes with no DB retry logic", "auto_approve": true}
+    """
+    try:
+        from agents.coding_agent import run_coding_agent
+        result = run_coding_agent(
+            service_name=request.service_name,
+            problem_description=request.problem,
+            auto_approve=request.auto_approve,
+        )
+        return CodeFixResponse(
+            status=result["status"],
+            service_name=request.service_name,
+            fix=result.get("fix"),
+            reflection=result.get("reflection"),
+            revision_count=result.get("revision_count", 0),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
