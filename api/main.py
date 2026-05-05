@@ -16,7 +16,7 @@ from pydantic import BaseModel
 app = FastAPI(
     title="SRE Agentic AI",
     description="Multi-agent SRE system powered by local Llama via Ollama",
-    version="0.4.0 — Phase 4: Coding Agent",
+    version="0.5.0 — Phase 5: Orchestrator",
 )
 
 
@@ -176,6 +176,62 @@ def fix_code(request: CodeFixRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+
+
+class PipelineRequest(BaseModel):
+    """
+    LEARNING — Orchestrator request:
+    A single incident description triggers the full multi-agent graph.
+    require_human_approval=False is safe for API/test use.
+    Set to True in production to gate the coding agent fix.
+    """
+    incident_description: str
+    require_human_approval: bool = False
+
+
+class PipelineResponse(BaseModel):
+    overall_status: str
+    unhealthy_services: list[str]
+    steps_taken: list[str]
+    final_summary: str
+    fix_approved: bool
+
+
+@app.post(
+    "/run-pipeline",
+    response_model=PipelineResponse,
+    summary="Run the full SRE orchestration pipeline",
+    description="Runs Health -> Retrieval -> Citation -> Coding agents via LangGraph.",
+)
+def run_pipeline(request: PipelineRequest):
+    """
+    LEARNING — The full multi-agent graph endpoint:
+    One call triggers the entire SRE pipeline:
+    1. Health Agent checks all containers
+    2. If issues found: Retrieval Agent searches logs
+    3. Citation Agent looks up runbooks
+    4. Coding Agent generates a fix
+    5. (Optional) Human approval gate
+    6. Summary synthesises everything
+
+    Try:
+      {"incident_description": "nginx OOMKilled 3 times, worker stopped"}
+    """
+    try:
+        from agents.orchestrator import run_sre_pipeline
+        final_state = run_sre_pipeline(
+            incident_description=request.incident_description,
+            require_human_approval=request.require_human_approval,
+        )
+        return PipelineResponse(
+            overall_status=final_state.get("overall_status", ""),
+            unhealthy_services=final_state.get("unhealthy_services", []),
+            steps_taken=final_state.get("steps_taken", []),
+            final_summary=final_state.get("final_summary", ""),
+            fix_approved=final_state.get("fix_approved", False),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline error: {str(e)}")
 
 
 @app.post(
